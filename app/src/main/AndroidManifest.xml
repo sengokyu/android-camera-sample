@@ -3,7 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-sdk
-        tools:overrideLibrary="android.support.v4;android.support.mediacompat,
+        tools:overrideLibrary="android.support.v4,
+          android.support.mediacompat,
           android.support.fragment,
           android.support.coreui,
           android.support.coreutils,
@@ -26,7 +27,9 @@
           android.arch.lifecycle.viewmodel,
           android.arch.lifecycle.livedata,
           android.arch.lifecycle.livedata.core,
-          android.arch.core"
+          android.arch.core,
+          android.support.v7.appcompat,
+          android.support.graphics.drawable"
         />
 
     <application
@@ -36,6 +39,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="false"
-        tools:targetApi="9" />
+        tools:remove="GoogleAppIndexingWarning"
+        />
 
 </manifest>
