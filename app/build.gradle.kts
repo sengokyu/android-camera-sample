@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "win.hile.captureandupload"
-    compileSdk = 10
+    compileSdk = 25
 
     defaultConfig {
         applicationId = "win.hile.captureandupload"
