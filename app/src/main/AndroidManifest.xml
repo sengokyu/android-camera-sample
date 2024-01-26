@@ -2,8 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-sdk
-        tools:overrideLibrary="android.support.v4,
+    <uses-feature android:name="android.hardware.camera" />
+    <uses-feature android:name="android.hardware.camera.autofocus" />
+
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <uses-sdk tools:overrideLibrary="android.support.v4,
           android.support.mediacompat,
           android.support.fragment,
           android.support.coreui,
@@ -29,8 +33,7 @@
           android.arch.lifecycle.livedata.core,
           android.arch.core,
           android.support.v7.appcompat,
-          android.support.graphics.drawable"
-        />
+          android.support.graphics.drawable" />
 
     <application
         android:allowBackup="true"
@@ -39,7 +42,15 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="false"
-        tools:remove="GoogleAppIndexingWarning"
-        />
-
+        android:theme="@style/AppStyle"
+        tools:remove="GoogleAppIndexingWarning">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
 </manifest>
