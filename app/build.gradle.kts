@@ -3,7 +3,19 @@ import org.jetbrains.kotlin.ir.backend.js.compile
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
+//    id("org.openapi.generator")
 }
+
+//task<org.openapitools.generator.gradle.plugin.tasks.GenerateTask>("azureStorage") {
+//    generatorName.set("kotlin")
+//    inputSpec.set("$rootDir/azure-rest-api-specs/specification/storage/resource-manager/Microsoft.Storage/stable/2023-01-01/storage.json")
+//    remoteInputSpec.set("https://raw.githubusercontent.com/Azure/azure-rest-api-specs/main/specification/storage/resource-manager/Microsoft.Storage/stable/2023-01-01/blob.json")
+//    outputDir.set("$buildDir/generated")
+//}
+
+//openApiGenerate {
+//}
 
 android {
     namespace = "win.hile.captureandupload"
@@ -18,6 +30,10 @@ android {
         versionName = "0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {
@@ -46,7 +62,18 @@ dependencies {
     //noinspection GradleCompatible
     implementation("com.android.support:support-v4:25.4.0")
     implementation("com.android.support:appcompat-v7:25.4.0")
+// SDK 15 以降じゃないとダメ？
+//    implementation("com.microsoft.azure.android:azure-storage-android:2.0.0@aar")
+    implementation("com.android.volley:volley:1.2.1")
+//    implementation("com.microsoft.azure:azure-client-runtime:1.7.14")
+// SDK 15 以降から
+//    implementation("com.jakewharton.threetenabp:threetenabp:1.0.3")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+}
+
+// secrets-gradle-plugin settings
+secrets {
+    propertiesFileName = "secrets.properties"
 }
