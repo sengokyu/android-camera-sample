@@ -7,7 +7,6 @@ import android.graphics.YuvImage
 import android.hardware.Camera
 import android.hardware.Camera.PreviewCallback
 import android.hardware.Camera.open
-import android.icu.text.SimpleDateFormat
 import android.os.Bundle
 import android.os.Handler
 import android.support.v7.app.AppCompatActivity
@@ -17,6 +16,7 @@ import android.view.SurfaceHolder.Callback
 import android.view.SurfaceView
 import com.android.volley.Request
 import com.android.volley.Request.Method
+import com.android.volley.RequestQueue
 import com.android.volley.Response
 import com.android.volley.VolleyError
 import com.android.volley.toolbox.ImageRequest
@@ -24,22 +24,47 @@ import com.android.volley.toolbox.JsonObjectRequest
 import com.android.volley.toolbox.JsonRequest
 import com.android.volley.toolbox.StringRequest
 import com.android.volley.toolbox.Volley
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.text.DateFormat
+import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
+import java.util.Locale
 import java.util.TimeZone
+import java.util.TimeZone.*
+import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), CoroutineScope {
     private var camera: Camera? = null
     private val handler = Handler()
+    private val job = SupervisorJob()
 
     // HTTP Request queue
-    private val requestQueue = Volley.newRequestQueue(this)
+    private lateinit var requestQueue: RequestQueue
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        this.requestQueue = Volley.newRequestQueue(this)
+
+        this.setContentView(R.layout.main)
+
+        val view = this.findViewById(R.id.mainSurfaceView) as SurfaceView
+
+        // previewに必要
+        view.holder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS)
+        view.holder.addCallback(this.callback)
+    }
 
     private val callback = object : Callback {
         override fun surfaceCreated(surfaceHolder: SurfaceHolder?) {
@@ -63,6 +88,22 @@ class MainActivity : AppCompatActivity() {
                 camera!!.release()
                 camera = null
             }
+        }
+    }
+
+    // 定期実行
+    private val tickTask = object : Runnable {
+        override fun run() {
+            Log.d(MainActivity::class.simpleName, "Tick task invoked.")
+            takePicture()
+
+            handler.postDelayed(this, 5 * 60 * 1000)
+        }
+
+        fun takePicture() {
+            if (camera == null) return
+
+            camera!!.autoFocus(autofocusCallback)
         }
     }
 
@@ -90,43 +131,6 @@ class MainActivity : AppCompatActivity() {
                 return
             }
 
-            val tokenRequest = object : JsonObjectRequest(
-                "https://login.microsoftonline.com/${BuildConfig.azureTenantId}/oauth2/v2.0/token",
-                { response ->
-                    {
-                        val accessToken = response.get("access_token")
-
-                    }
-                },
-                { error ->
-                    Log.e(
-                        MainActivity::class.simpleName,
-                        error.message
-                    )
-                })
-
-
-            /*
-                        {
-                            override fun getBodyContentType(): String {
-                                return "application/x-www-form-urlencoded; charset=UTF-8"
-                            }
-
-                            override fun getParams(): MutableMap<String, String> {
-                                return mutableMapOf<String, String>(
-                                    "client_id" to BuildConfig.azureClientId,
-                                    "scope" to ".default",
-                                    "client_secret" to BuildConfig.azureClientSecret,
-                                    "grant_type" to "client_credentials"
-                                )
-                            }
-                        }
-            */
-
-
-
-            requestQueue.add(tokenRequest)
-
             val format = pCamera.parameters.previewFormat
             val width = pCamera.parameters.previewSize.width
             val height = pCamera.parameters.previewSize.height
@@ -136,78 +140,17 @@ class MainActivity : AppCompatActivity() {
             Log.d(MainActivity::class.simpleName, "YuvImage created: $yuvImage")
 
             val output = ByteArrayOutputStream()
+
             output.use {
                 yuvImage.compressToJpeg(Rect(0, 0, width, height), 90, output)
-
-                val dateFormat = DateFormat.getDateTimeInstance()
-                dateFormat.timeZone = TimeZone.getTimeZone("UTC")
-                val date = dateFormat.format(Date())
-
                 val blob = output.toByteArray()
 
-                val request = object : StringRequest(Request.Method.PUT,
-                    "https://${BuildConfig.azureStorageName}.blob.core.windows.net${BuildConfig.azureStoragePath}",
-                    Response.Listener<String> { response ->
-                        {
-                            Log.i(MainActivity::class.simpleName, response)
-                        }
-                    },
-                    Response.ErrorListener { error: VolleyError? ->
-                        {
-                            Log.e(MainActivity::class.simpleName, error.toString())
-                        }
-                    }) {
-                    override fun getHeaders(): MutableMap<String, String> {
-                        val headers = hashMapOf<String, String>(
-                            "Authorization" to BuildConfig.azureStorageAuthorization,
-                            "x-ms-date" to android.text.format.DateFormat.format(
-                                "",
-                                Calendar.getInstance()
-                            ).toString(),
-                            "x-ms-version" to BuildConfig.azureVersion,
-                            "Content-Type" to "image/jpeg",
-                            "Content-Length" to blob.size.toString(),
-                        )
-                        return headers;
-                    }
+                launchPutBlob(blob)
 
-                    override fun getBody(): ByteArray {
-                        return blob
-                    }
-                }
                 //
                 Log.d(MainActivity::class.simpleName, "Adding a request to the queue.")
-                queue.add(request)
             }
         }
-    }
-
-    // 定期実行
-    private val tickTask = object : Runnable {
-        override fun run() {
-            Log.d(MainActivity::class.simpleName, "Tick task invoked.")
-            takePicture()
-
-            handler.postDelayed(this, 5 * 60 * 1000)
-        }
-
-        fun takePicture() {
-            if (camera == null) return
-
-            camera!!.autoFocus(autofocusCallback)
-        }
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        this.setContentView(R.layout.main)
-
-        val view = this.findViewById(R.id.mainSurfaceView) as SurfaceView
-
-        // previewに必要
-        view.holder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS)
-        view.holder.addCallback(this.callback)
     }
 
     private fun openCamera() {
@@ -216,15 +159,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    suspend fun refreshAccessToken(): Nothing = suspendCoroutine {
+    fun launchPutBlob(blob: ByteArray) = launch {
+        refreshAccessToken()
+        putBlob((blob))
+    }
+
+    private suspend fun refreshAccessToken(): Unit = suspendCoroutine {
         val url = "https://login.microsoftonline.com/${BuildConfig.azureTenantId}/oauth2/v2.0/token"
-        val body = mutableMapOf<String, String>(
+        val contentType = "application/x-www-form-urlencoded; charset=UTF-8"
+        val params = mutableMapOf<String, String>(
             "client_id" to BuildConfig.azureClientId,
             "scope" to ".default",
             "client_secret" to BuildConfig.azureClientSecret,
             "grant_type" to "client_credentials"
         )
-        val contentType = "application/x-www-form-urlencoded; charset=UTF-8"
 
         val request = object : JsonObjectRequest(
             url,
@@ -236,45 +184,62 @@ class MainActivity : AppCompatActivity() {
                     putString("AccessToken", accessToken)
                     apply()
                 }
-
-                it.resumeWith(Result.success())
+                it.resume(Unit)
             },
             { error ->
                 it.resumeWithException(HttpException("Get access token failed. ${error.message}"))
             }) {
+
             override fun getBodyContentType(): String {
                 return contentType
             }
 
-            override fun getParams(): MutableMap<String, String>? {
-                return mutableMapOf<String, String>(
-                    "client_id" to BuildConfig.azureClientId,
-                    "scope" to ".default",
-                    "client_secret" to BuildConfig.azureClientSecret,
-                    "grant_type" to "client_credentials"
-                )
+            override fun getParams(): MutableMap<String, String> {
+                return params
             }
         }
 
         this.requestQueue.add(request)
     }
 
-    suspend fun putBlob(blob: ByteArray) = suspendCoroutine<Void> {
+    private suspend fun putBlob(blob: ByteArray): Unit = suspendCoroutine {
         val accessToken = getPreferences(Context.MODE_PRIVATE).getString("AccessToken", null)
         val url =
             "https://${BuildConfig.azureStorageName}.blob.core.windows.net${BuildConfig.azureStoragePath}"
         val headers = mutableMapOf<String, String>(
             "Authorization" to "Bearer $accessToken",
-            "x-ms-date" to android.text.format.DateFormat.format(
-                "YYYY-MM-DDTHH:MM.SS.000z",
-                Date()
-            ).toString(),
+            "x-ms-date" to this.getFormatedDate(),
             "x-ms-version" to BuildConfig.azureVersion,
             "Content-Type" to "image/jpeg",
             "Content-Length" to blob.size.toString()
         )
-        val request = object:StringRequest(url, response->
-        , error -> it.) {}
 
+        val request = object : StringRequest(url,
+            { _ ->
+                it.resume(Unit)
+            },
+            { error ->
+                it.resumeWithException(HttpException("Put blob failed. ${error.message}"))
+            }) {
+            override fun getHeaders(): MutableMap<String, String> {
+                return headers
+            }
+
+            override fun getBody(): ByteArray {
+                return blob
+            }
+        }
+
+        this.requestQueue.add(request)
     }
+
+    private fun getFormatedDate(): String {
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+        dateFormat.timeZone = TimeZone.getTimeZone("UTC")
+
+        return dateFormat.format(Date())
+    }
+
+    override val coroutineContext: CoroutineContext
+        get() = Dispatchers.Main + job
 }
